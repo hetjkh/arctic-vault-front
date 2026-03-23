@@ -1,0 +1,38 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Ronit",
+      "fullName": "Ronit Kaushal",
+      "pin": "1234"
+    },
+    {
+      "id": 2,
+      "name": "Het",
+      "fullName": "Het Patel",
+      "pin": "5678"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "9a6381fc-ebd8-40c3-8022-eef5556a29ed",
+      "type": "income",
+      "category": "Client Payment",
+      "amount": 1000,
+      "description": "",
+      "date": "2026-03-23T05:04:14.060Z"
+    }
+  ],
+  "invoices": [
+    {
+      "id": "28393879-ecbf-40c7-9b23-d9cdf9e7060b",
+      "clientName": "Ronit Kaushal",
+      "description": "",
+      "amount": 100,
+      "type": "official",
+      "status": "draft",
+      "createdAt": "2026-03-23T05:08:59.187Z"
+    }
+  ],
+  "settlements": []
+}
