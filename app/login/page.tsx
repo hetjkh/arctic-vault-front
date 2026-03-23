@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { setSession } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/backend';
 import { TrendingUp } from 'lucide-react';
 
 type LoginUser = {
@@ -37,7 +38,7 @@ export default function LoginPage() {
 
     const loadUsers = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/users');
+        const res = await fetch(`${BACKEND_URL}/api/users`);
         if (!res.ok) throw new Error('Failed to load users');
         const list = (await res.json()) as Array<{ id: string; username: string; fullName: string }>;
 
@@ -99,7 +100,7 @@ export default function LoginPage() {
     if (!selected) return;
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:4000/api/auth/login', {
+      const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: selected.username, pin: enteredPin }),

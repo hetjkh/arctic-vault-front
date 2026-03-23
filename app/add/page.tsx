@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { TransactionType } from '@/types';
 import { formatCurrency } from '@/lib/calculations';
 import { getSession } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/backend';
 import { ChevronLeft } from 'lucide-react';
 
 const categories = {
@@ -39,7 +40,7 @@ export default function AddTransactionPage() {
 
       setSessionName(session.name);
 
-      const usersRes = await fetch('http://localhost:4000/api/users');
+      const usersRes = await fetch(`${BACKEND_URL}/api/users`);
       const usersData = (await usersRes.json()) as Array<{ id: string; fullName: string; username: string }>;
 
       const mapped = usersData.map((u) => ({
@@ -98,7 +99,7 @@ export default function AddTransactionPage() {
     setError('');
     const payload: Record<string, unknown> = { type, amount: amountNum, category, description };
     if (type === 'personal') payload.userId = userId;
-    const res = await fetch('http://localhost:4000/api/transactions', {
+    const res = await fetch(`${BACKEND_URL}/api/transactions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });

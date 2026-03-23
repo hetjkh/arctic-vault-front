@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Transaction, TransactionType } from '@/types';
 import TransactionItem from '@/components/TransactionItem';
 import { getSession } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/backend';
 import Link from 'next/link';
 import { Plus, X } from 'lucide-react';
 
@@ -73,7 +74,7 @@ export default function TransactionsPage() {
       setLoading(true);
       setPageError('');
       try {
-        const usersRes = await fetch('http://localhost:4000/api/users');
+        const usersRes = await fetch(`${BACKEND_URL}/api/users`);
         const usersData = (await usersRes.json()) as Array<{ id: string; fullName: string; username: string }>;
         const nextUsersMap: Record<string, string> = {};
         const nextUsersList = usersData.map((u) => ({
@@ -120,7 +121,7 @@ export default function TransactionsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this transaction?')) return;
-    await fetch(`http://localhost:4000/api/transactions/${id}`, { method: 'DELETE' });
+    await fetch(`${BACKEND_URL}/api/transactions/${id}`, { method: 'DELETE' });
     // reload will happen via dependency effect
     setPage(1);
   };
@@ -161,7 +162,7 @@ export default function TransactionsPage() {
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
 
-      const res = await fetch(`http://localhost:4000/api/transactions?${params.toString()}`);
+      const res = await fetch(`${BACKEND_URL}/api/transactions?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) {
         throw new Error(json?.error || 'Failed to load transactions');
@@ -268,7 +269,7 @@ export default function TransactionsPage() {
       };
       if (editType === 'personal') payload.userId = editUserId;
 
-      const res = await fetch(`http://localhost:4000/api/transactions/${editingId}`, {
+      const res = await fetch(`${BACKEND_URL}/api/transactions/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

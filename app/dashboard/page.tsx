@@ -14,6 +14,7 @@ import {
 import { getSession, clearSession, SessionUser } from '@/lib/auth';
 import TransactionItem from '@/components/TransactionItem';
 import Link from 'next/link';
+import { BACKEND_URL } from '@/lib/backend';
 import {
   ChevronRight, LogOut, ArrowDownLeft, ArrowUpRight,
   Wallet, TrendingUp, TrendingDown, Activity,
@@ -315,9 +316,9 @@ export default function DashboardPage() {
 
     const load = async () => {
       const [usersRes, txRes, settlementsRes] = await Promise.all([
-        fetch('http://localhost:4000/api/users'),
-        fetch('http://localhost:4000/api/transactions'),
-        fetch('http://localhost:4000/api/settlements'),
+        fetch(`${BACKEND_URL}/api/users`),
+        fetch(`${BACKEND_URL}/api/transactions`),
+        fetch(`${BACKEND_URL}/api/settlements`),
       ]);
 
       const backendUsers = (await usersRes.json()) as Array<{

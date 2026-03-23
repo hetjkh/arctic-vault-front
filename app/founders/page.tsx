@@ -10,6 +10,7 @@ import {
 } from '@/lib/calculations';
 import { ArrowRight } from 'lucide-react';
 import { getSession } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/backend';
 
 export default function FoundersPage() {
   const router = useRouter();
@@ -21,9 +22,9 @@ export default function FoundersPage() {
 
   const load = useCallback(async () => {
     const [usersRes, txRes, settlementsRes] = await Promise.all([
-      fetch('http://localhost:4000/api/users'),
-      fetch('http://localhost:4000/api/transactions'),
-      fetch('http://localhost:4000/api/settlements'),
+      fetch(`${BACKEND_URL}/api/users`),
+      fetch(`${BACKEND_URL}/api/transactions`),
+      fetch(`${BACKEND_URL}/api/settlements`),
     ]);
 
     const backendUsers = (await usersRes.json()) as Array<{
@@ -142,7 +143,7 @@ export default function FoundersPage() {
         return;
       }
 
-      await fetch('http://localhost:4000/api/settlements', {
+      await fetch(`${BACKEND_URL}/api/settlements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
