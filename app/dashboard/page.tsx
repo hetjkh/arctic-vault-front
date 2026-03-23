@@ -294,6 +294,14 @@ function StatCard({
   );
 }
 
+function formatCurrency2(amount: number): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 /* ─── Main page ────────────────────────────── */
 export default function DashboardPage() {
   const router = useRouter();
@@ -512,6 +520,32 @@ export default function DashboardPage() {
     const expenses    = calcTotalExpenses(scopeData);
     const netProfit   = calcNetProfit(scopeData);
 
+    const bankMin = 50000;
+    const companyBank = myBal.balance + partnerBal.balance;
+    // Current pool available above the bank minimum
+    const currentPool = Math.max(0, companyBank - bankMin);
+
+    // Withdrawals already taken by each founder (within current scoped filter)
+    const myW = myBal.totalPersonalWithdrawals;
+    const partnerW = partnerBal.totalPersonalWithdrawals;
+    const totalW = myW + partnerW;
+
+    // Reconstruct each founder's "credited" allowance allocation so if one founder
+    // uses from their allowance, the other founder's remaining allowance is unchanged.
+    const allocatedMy = (currentPool + totalW) / 2;
+    const allocatedPartner = allocatedMy; // equal split
+
+    const myRemainingAllowance = Math.max(0, allocatedMy - myW);
+    const partnerRemainingAllowance = Math.max(0, allocatedPartner - partnerW);
+
+    // If logged in is Ronit, show Ronit as myRemaining and Het as partnerRemaining.
+    // If logged in is Het, swap them.
+    const ronitAllowance = isRonit ? myRemainingAllowance : partnerRemainingAllowance;
+    const hetAllowance = isRonit ? partnerRemainingAllowance : myRemainingAllowance;
+    const myAllowance = myRemainingAllowance;
+    const partnerAllowance = partnerRemainingAllowance;
+    const totalBalance = companyBank;
+
     const recentSorted = [...scopeData.transactions].sort((a, b) => {
       const ta = new Date(a.date).getTime();
       const tb = new Date(b.date).getTime();
@@ -537,6 +571,9 @@ export default function DashboardPage() {
       isRonit, myBal, partnerUser, partnerBal, revenue, expenses, netProfit, recent,
       topCat, monthStats, months6, catBreakdown, userMap, greeting, profitMargin,
       avgTxSize, totalTx,
+      bankMin, companyBank,
+      ronitAllowance, hetAllowance, totalBalance,
+      myAllowance, partnerAllowance,
     };
   }, [data, user, rangeMode, customYear, customMonth, typeFilter, recentSort, anchorDate]);
 
@@ -811,12 +848,42 @@ export default function DashboardPage() {
             color="rgba(255,255,255,0.06)" textColor="#00ff41"
             delay={0.25}
           />
-          <StatCard
-            label="My Share Withdrawn" value={mask(formatCompact(derived.myBal.totalPersonalWithdrawals))}
-            sub="Personal withdrawals" icon={Wallet}
-            color="rgba(255,255,255,0.06)" textColor="rgba(255,255,255,0.85)"
-            delay={0.3}
-          />
+          {/* Allowance breakdown (like your screenshot) */}
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 20,
+              padding: 16,
+              animation: 'fadeUp 0.5s 0.3s ease both',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              minHeight: 130,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(200,180,255,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0d0d0d' }}>Ronit allowance</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.ronitAllowance))}</div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(150,255,190,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0d0d0d' }}>Het allowance</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.hetAllowance))}</div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.95)' }}>Minimum balance</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'rgba(255,255,255,0.95)', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.bankMin))}</div>
+            </div>
+
+            <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 12px', borderRadius: 14, background: '#000', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'rgba(255,255,255,0.9)' }}>Total Balance</div>
+              <div style={{ fontSize: 18, fontWeight: 1000, color: '#00ff41', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.totalBalance))}</div>
+            </div>
+          </div>
         </div>
 
         {/* ── Charts row ────────────────────────────────── */}
@@ -1091,7 +1158,7 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
             {[
               { label: 'My Share', val: formatCompact(derived.myBal.totalIncome / 2), color: '#00ff41', icon: ArrowDownLeft },
-              { label: 'Withdrawn', val: formatCompact(derived.myBal.totalPersonalWithdrawals), color: '#ff0033', icon: Wallet },
+              { label: 'Allowance', val: formatCurrency2(derived.myAllowance), color: '#00ff41', icon: Wallet },
               { label: 'Net', val: formatCompact(derived.netProfit), color: derived.netProfit >= 0 ? '#00ff41' : '#ff0033', icon: ArrowUpRight },
             ].map(({ label, val, color, icon: Icon }) => (
               <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.07)', padding: '14px 12px' }}>
@@ -1215,7 +1282,7 @@ export default function DashboardPage() {
                 { label: 'My Balance',     val: formatCurrency(derived.myBal.balance),                       color: derived.myBal.balance >= 0 ? '#00ff41' : '#ff0033' },
                 { label: 'Income Share',   val: formatCurrency(derived.myBal.totalIncome / 2),               color: '#00ff41'  },
                 { label: 'Expense Share',  val: formatCurrency(derived.myBal.totalSharedExpenses / 2),       color: '#ff0033'  },
-                { label: 'Withdrawals',    val: formatCurrency(derived.myBal.totalPersonalWithdrawals),       color: 'rgba(255,255,255,0.5)' },
+                { label: 'Allowance',      val: formatCurrency2(derived.myAllowance),                         color: 'rgba(255,255,255,0.5)' },
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{label}</span>
