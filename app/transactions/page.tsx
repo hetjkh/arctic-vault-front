@@ -22,7 +22,7 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 
 const EDIT_CATEGORIES = {
   income: ['Client Payment', 'Invoice Payment', 'Project Revenue', 'Consulting', 'Other'],
-  expense: ['Office Supplies', 'Software', 'Marketing', 'Travel', 'Utilities', 'Bank Fee', 'Other'],
+  expense: ['Office Supplies', 'Software', 'Marketing', 'Travel', 'Utilities', 'Bank Fee', 'Food', 'Other'],
   personal: ['Withdrawal', 'Salary Draw', 'Personal Expense', 'Other'],
 } as const;
 

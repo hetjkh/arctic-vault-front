@@ -10,7 +10,7 @@ import { ChevronLeft } from 'lucide-react';
 
 const categories = {
   income: ['Client Payment', 'Invoice Payment', 'Project Revenue', 'Consulting', 'Other'],
-  expense: ['Office Supplies', 'Software', 'Marketing', 'Travel', 'Utilities', 'Bank Fee', 'Other'],
+  expense: ['Office Supplies', 'Software', 'Marketing', 'Travel', 'Utilities', 'Bank Fee', 'Food', 'Other'],
   personal: ['Withdrawal', 'Salary Draw', 'Personal Expense', 'Other'],
 };
 
