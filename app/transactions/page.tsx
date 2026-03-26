@@ -58,6 +58,7 @@ export default function TransactionsPage() {
   const [editAmount, setEditAmount] = useState('');
   const [editCategory, setEditCategory] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editUserId, setEditUserId] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -241,6 +242,7 @@ export default function TransactionsPage() {
     setEditAmount(String(tx.amount));
     setEditCategory(tx.category);
     setEditDescription(tx.description || '');
+    setEditDate(String(tx.date || '').slice(0, 10));
     setEditUserId(tx.userId ? String(tx.userId) : '');
     setEditError('');
     setEditSaving(false);
@@ -266,6 +268,7 @@ export default function TransactionsPage() {
         amount: amountNum,
         category: editCategory,
         description: editDescription,
+        date: editDate,
       };
       if (editType === 'personal') payload.userId = editUserId;
 
@@ -578,6 +581,19 @@ export default function TransactionsPage() {
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   style={{ width: '100%', background: '#111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '12px 14px', color: '#fff', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.35)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  style={{ width: '100%', background: '#111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '12px 14px', color: '#fff', outline: 'none' }}
+                  required
                 />
               </div>
 

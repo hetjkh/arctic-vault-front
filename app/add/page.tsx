@@ -26,6 +26,7 @@ export default function AddTransactionPage() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(categories.income[0]);
   const [description, setDescription] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10)); // YYYY-MM-DD
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [userId, setUserId] = useState('');
   const [sessionUserId, setSessionUserId] = useState('');
@@ -97,7 +98,7 @@ export default function AddTransactionPage() {
     if (amountNum <= 0) return;
     setSubmitting(true);
     setError('');
-    const payload: Record<string, unknown> = { type, amount: amountNum, category, description };
+    const payload: Record<string, unknown> = { type, amount: amountNum, category, description, date };
     if (type === 'personal') payload.userId = userId;
     const res = await fetch(`${BACKEND_URL}/api/transactions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -192,6 +193,20 @@ export default function AddTransactionPage() {
           <div style={{ marginBottom: 14 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Note (optional)</p>
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What's this for?" style={inputStyle} />
+          </div>
+
+          {/* Date (expense + others) */}
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              Date
+            </p>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              style={inputStyle}
+              required
+            />
           </div>
 
           {/* Founder — personal only */}
