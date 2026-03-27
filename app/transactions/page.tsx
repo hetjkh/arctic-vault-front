@@ -28,6 +28,49 @@ const EDIT_CATEGORIES = {
 
 type SortValue = 'newest' | 'oldest' | 'amountAsc' | 'amountDesc';
 
+function txTimeMs(t: Transaction): number {
+  const ms = new Date(t.date).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+/** Stable ordering when dates/amounts tie (backend order alone is often undefined for same calendar day). */
+function sortTransactions(items: Transaction[], sort: SortValue): Transaction[] {
+  const copy = [...items];
+  const idCmpDesc = (a: Transaction, b: Transaction) => b.id.localeCompare(a.id);
+  const idCmpAsc = (a: Transaction, b: Transaction) => a.id.localeCompare(b.id);
+
+  if (sort === 'newest') {
+    copy.sort((a, b) => {
+      const dt = txTimeMs(b) - txTimeMs(a);
+      if (dt !== 0) return dt;
+      return idCmpDesc(a, b);
+    });
+  } else if (sort === 'oldest') {
+    copy.sort((a, b) => {
+      const dt = txTimeMs(a) - txTimeMs(b);
+      if (dt !== 0) return dt;
+      return idCmpAsc(a, b);
+    });
+  } else if (sort === 'amountDesc') {
+    copy.sort((a, b) => {
+      const da = b.amount - a.amount;
+      if (da !== 0) return da;
+      const dt = txTimeMs(b) - txTimeMs(a);
+      if (dt !== 0) return dt;
+      return idCmpDesc(a, b);
+    });
+  } else {
+    copy.sort((a, b) => {
+      const da = a.amount - b.amount;
+      if (da !== 0) return da;
+      const dt = txTimeMs(b) - txTimeMs(a);
+      if (dt !== 0) return dt;
+      return idCmpDesc(a, b);
+    });
+  }
+  return copy;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -169,7 +212,7 @@ export default function TransactionsPage() {
         throw new Error(json?.error || 'Failed to load transactions');
       }
 
-      setTransactions((json.items || []) as Transaction[]);
+      setTransactions(sortTransactions((json.items || []) as Transaction[], sort));
       setTotal(Number(json.total || 0));
     } catch (e: any) {
       setPageError(e?.message || 'Failed to load transactions.');
