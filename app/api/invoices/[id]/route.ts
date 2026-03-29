@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, writeDB } from '@/lib/db';
-import { Transaction } from '@/types';
+import { LegacyFlatInvoice, Transaction } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface Params {
@@ -13,7 +13,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json();
     const data = await readDB();
 
-    const idx = data.invoices.findIndex((inv) => inv.id === id);
+    const idx = data.invoices.findIndex((inv: LegacyFlatInvoice) => inv.id === id);
     if (idx === -1) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }
@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     // Auto-create income transaction when invoice is first marked paid
     if (newStatus === 'paid' && oldStatus !== 'paid') {
-      const invoice = data.invoices[idx];
+      const invoice = data.invoices[idx] as LegacyFlatInvoice;
       const tx: Transaction = {
         id: uuidv4(),
         type: 'income',

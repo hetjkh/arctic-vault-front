@@ -131,3 +131,42 @@ button, a { transition: all 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
     margin-left: var(--sidebar-collapsed-w);
   }
 }
+
+/* ── Invoice A4 preview (fixed light palette; matches design `bg-card` #eac5ff5e) ── */
+.invoice-document-root {
+  --invoice-page-bg: #f3f4f6;
+  --invoice-paper: #ffffff;
+  /* Same as theme --card in light: lavender tint */
+  --invoice-accent: #eac5ff5e;
+  --invoice-text: #111827;
+  --invoice-text-secondary: #4b5563;
+  --invoice-muted: #6b7280;
+  --invoice-border: #d1d5db;
+  --invoice-border-subtle: #e5e7eb;
+  --invoice-border-table: #d1d5db;
+  color-scheme: light;
+  background: var(--invoice-page-bg);
+  color: var(--invoice-text);
+}
+
+.invoice-document-root .invoice-paper {
+  background: var(--invoice-paper);
+  color: var(--invoice-text);
+}
+
+.invoice-document-root .invoice-strip {
+  background-color: var(--invoice-accent);
+  color: var(--invoice-text);
+}
+
+.invoice-document-root .invoice-muted {
+  color: var(--invoice-muted);
+}
+
+.invoice-document-root .invoice-th-border {
+  border-bottom: 2px solid var(--invoice-border-subtle);
+}
+
+.invoice-document-root .invoice-row-border {
+  border-bottom: 1px solid var(--invoice-border-table);
+}

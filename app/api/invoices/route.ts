@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readDB, writeDB } from '@/lib/db';
-import { Invoice } from '@/types';
+import { LegacyFlatInvoice } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET() {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = await readDB();
 
-    const invoice: Invoice = {
+    const invoice: LegacyFlatInvoice = {
       id: uuidv4(),
       clientName: body.clientName,
       description: body.description || '',

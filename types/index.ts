@@ -22,7 +22,59 @@ export interface Transaction {
   invoiceId?: string; // if auto-created from invoice payment
 }
 
+export interface InvoiceLineItemRow {
+  product: string;
+  description: string;
+  quantity: number;
+  price: number;
+}
+
+export interface InvoiceFromData {
+  name: string;
+  addressLines: string[];
+  phone: string;
+  email: string;
+  gst: string;
+}
+
+export interface InvoiceBilling {
+  name: string;
+  address: string;
+  tradeLicense: string;
+  phone: string;
+}
+
+export interface InvoicePayment {
+  holder: string;
+  accountNumber: string;
+  bank: string;
+  ifsc: string;
+  swift: string;
+  mobile: string;
+}
+
+/** Full invoice (MongoDB + printable UI). */
 export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  title?: string;
+  from: InvoiceFromData;
+  billing: InvoiceBilling;
+  items: InvoiceLineItemRow[];
+  payment: InvoicePayment;
+  subtotal: number;
+  tax: number;
+  total: number;
+  currency?: string;
+  type: InvoiceType;
+  status: InvoiceStatus;
+  createdAt: string;
+  updatedAt?: string;
+  paidAt?: string;
+}
+
+/** Legacy flat row in `data/db.json` (local Next API only). */
+export interface LegacyFlatInvoice {
   id: string;
   clientName: string;
   description: string;
@@ -45,7 +97,7 @@ export interface Settlement {
 export interface DBData {
   users: User[];
   transactions: Transaction[];
-  invoices: Invoice[];
+  invoices: LegacyFlatInvoice[];
   settlements: Settlement[];
 }
 

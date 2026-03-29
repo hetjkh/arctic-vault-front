@@ -1,8 +1,8 @@
-import { Invoice } from '@/types';
+import { LegacyFlatInvoice } from '@/types';
 import { formatCurrency } from '@/lib/calculations';
 
 interface InvoiceCardProps {
-  invoice: Invoice;
+  invoice: LegacyFlatInvoice;
   onMarkSent?: (id: string) => void;
   onMarkPaid?: (id: string) => void;
 }
