@@ -20,25 +20,6 @@ const TYPE_CONFIG = {
   personal: { label: 'Personal', color: '#ffffff', bg: 'rgba(255,255,255,0.07)', border: 'rgba(255,255,255,0.2)' },
 };
 
-/** Selected calendar day + current local time so multiple txs on the same day sort by when they were added. */
-function toTransactionIsoDate(calendarYmd: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calendarYmd.trim());
-  if (!m) return new Date().toISOString();
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const da = Number(m[3]);
-  const now = new Date();
-  return new Date(
-    y,
-    mo - 1,
-    da,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds(),
-  ).toISOString();
-}
-
 export default function AddTransactionPage() {
   const router = useRouter();
   const [type, setType] = useState<TransactionType>('income');
@@ -117,13 +98,7 @@ export default function AddTransactionPage() {
     if (amountNum <= 0) return;
     setSubmitting(true);
     setError('');
-    const payload: Record<string, unknown> = {
-      type,
-      amount: amountNum,
-      category,
-      description,
-      date: toTransactionIsoDate(date),
-    };
+    const payload: Record<string, unknown> = { type, amount: amountNum, category, description, date };
     if (type === 'personal') payload.userId = userId;
     const res = await fetch(`${BACKEND_URL}/api/transactions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
