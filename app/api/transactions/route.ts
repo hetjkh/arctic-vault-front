@@ -17,13 +17,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = await readDB();
 
+    const rawUserId = body.userId;
+    const coercedUserId =
+      rawUserId === undefined || rawUserId === null
+        ? undefined
+        : Number(rawUserId);
+    const userId =
+      coercedUserId !== undefined && Number.isFinite(coercedUserId)
+        ? coercedUserId
+        : undefined;
+
     const tx: Transaction = {
       id: uuidv4(),
       type: body.type,
       category: body.category || 'General',
       amount: Number(body.amount),
       description: body.description || '',
-      userId: body.userId ?? undefined,
+      userId,
       date: new Date().toISOString(),
       invoiceId: body.invoiceId ?? undefined,
     };

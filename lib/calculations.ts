@@ -5,8 +5,16 @@ function r(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** IDs from JSON/API may be number or string; strict `===` misses personal tx attribution. */
+function sameUserId(a: number | string | undefined | null, b: number): boolean {
+  if (a == null) return false;
+  const na = Number(a);
+  const nb = Number(b);
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
+}
+
 export function calcFounderBalance(userId: number, data: DBData): FounderBalance {
-  const user = data.users.find((u) => u.id === userId);
+  const user = data.users.find((u) => Number(u.id) === Number(userId));
 
   const totalIncome = data.transactions
     .filter((t) => t.type === 'income')
@@ -17,15 +25,15 @@ export function calcFounderBalance(userId: number, data: DBData): FounderBalance
     .reduce((sum, t) => r(sum + t.amount), 0);
 
   const totalPersonalWithdrawals = data.transactions
-    .filter((t) => t.type === 'personal' && t.userId === userId)
+    .filter((t) => t.type === 'personal' && sameUserId(t.userId, userId))
     .reduce((sum, t) => r(sum + t.amount), 0);
 
   const settlementsReceived = data.settlements
-    .filter((s) => s.toUserId === userId)
+    .filter((s) => sameUserId(s.toUserId, userId))
     .reduce((sum, s) => r(sum + s.amount), 0);
 
   const settlementsPaid = data.settlements
-    .filter((s) => s.fromUserId === userId)
+    .filter((s) => sameUserId(s.fromUserId, userId))
     .reduce((sum, s) => r(sum + s.amount), 0);
 
   // Use individual rounded halves to avoid e.g. 100.005 floating-point drift

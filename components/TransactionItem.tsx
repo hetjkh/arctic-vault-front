@@ -50,7 +50,6 @@ export default function TransactionItem({
 
   return (
     <div
-      className="group"
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '12px 14px', borderRadius: 16,
@@ -111,53 +110,83 @@ export default function TransactionItem({
         {config.prefix}{formatCurrency(transaction.amount)}
       </span>
 
-      {/* Delete */}
-      {onDelete && (
-        <button
-          onClick={() => onDelete(transaction.id)}
+      {(onEdit || onDelete) && (
+        <div
           style={{
-            flexShrink: 0, width: 28, height: 28, borderRadius: 8,
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'rgba(255,255,255,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: 0, transition: 'opacity 0.15s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexShrink: 0,
+            marginLeft: 4,
           }}
-          className="delete-btn"
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ff0033'; (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,0,51,0.1)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.15)'; (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <Trash2 size={14} />
-        </button>
+          {onEdit && (
+            <button
+              type="button"
+              aria-label="Edit transaction"
+              onClick={() => onEdit(transaction.id)}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'color 0.15s, background 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = '#00ff41';
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,255,65,0.12)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,255,65,0.25)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.5)';
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              <Pencil size={16} strokeWidth={2} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              aria-label="Delete transaction"
+              onClick={() => onDelete(transaction.id)}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'color 0.15s, background 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = '#ff0033';
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,0,51,0.1)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,0,51,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.5)';
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.04)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              <Trash2 size={16} strokeWidth={2} />
+            </button>
+          )}
+        </div>
       )}
-      {/* Edit */}
-      {onEdit && (
-        <button
-          onClick={() => onEdit(transaction.id)}
-          style={{
-            flexShrink: 0, width: 28, height: 28, borderRadius: 8,
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'rgba(255,255,255,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: 0, transition: 'opacity 0.15s',
-            position: 'absolute',
-            right: onDelete ? 36 : 14,
-            bottom: 12,
-          }}
-          className="edit-btn"
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = '#00ff41';
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,255,65,0.1)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.15)';
-            (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-          }}
-        >
-          <Pencil size={14} />
-        </button>
-      )}
-      <style>{`.delete-btn{opacity:0}.group:hover .delete-btn,.delete-btn:hover{opacity:1}`}</style>
-      <style>{`.edit-btn{opacity:0}.group:hover .edit-btn,.edit-btn:hover{opacity:1}`}</style>
     </div>
   );
 }

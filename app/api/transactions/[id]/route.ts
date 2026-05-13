@@ -16,7 +16,14 @@ export async function PUT(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
     }
 
-    data.transactions[idx] = { ...data.transactions[idx], ...body };
+    let updated = { ...data.transactions[idx], ...body };
+    if ('userId' in body && (body.userId === null || body.userId === '')) {
+      updated = { ...updated, userId: undefined };
+    } else if (updated.userId != null && updated.userId !== '') {
+      const n = Number(updated.userId);
+      updated = { ...updated, userId: Number.isFinite(n) ? n : undefined };
+    }
+    data.transactions[idx] = updated;
     await writeDB(data);
 
     return NextResponse.json(data.transactions[idx]);

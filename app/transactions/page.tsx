@@ -120,23 +120,19 @@ export default function TransactionsPage() {
     loadUsers();
   }, [router]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this transaction?')) return;
-    await fetch(`${BACKEND_URL}/api/transactions/${id}`, { method: 'DELETE' });
-    // reload will happen via dependency effect
-    setPage(1);
-  };
-
-  const loadTransactions = useCallback(async () => {
+  const loadTransactions = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     if (filter === 'mine' && !backendUserId) {
       setTransactions([]);
       setTotal(0);
-      setLoading(false);
+      if (!silent) setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setPageError('');
+    if (!silent) {
+      setLoading(true);
+      setPageError('');
+    }
     try {
       const params = new URLSearchParams();
       params.set('page', String(page));
@@ -176,7 +172,7 @@ export default function TransactionsPage() {
       setTransactions([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [
     backendUserId,
@@ -191,6 +187,22 @@ export default function TransactionsPage() {
     dateFrom,
     dateTo,
   ]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    if (!confirm('Delete this transaction?')) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/transactions/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        setPageError(body?.error || 'Failed to delete transaction.');
+        return;
+      }
+      setPageError('');
+      await loadTransactions({ silent: true });
+    } catch {
+      setPageError('Failed to delete transaction.');
+    }
+  }, [loadTransactions]);
 
   // Reset page to 1 when filters (except page itself) change.
   const resetKey = useMemo(() => JSON.stringify({ filter, search, category, minAmount, maxAmount, dateFrom, dateTo, sort, limit }), [
@@ -233,6 +245,12 @@ export default function TransactionsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  const editCategoryOptions = useMemo(() => {
+    const base = [...(EDIT_CATEGORIES[editType] as unknown as string[])];
+    if (editCategory && !base.includes(editCategory)) base.unshift(editCategory);
+    return base;
+  }, [editType, editCategory]);
+
   const openEditById = (id: string) => {
     const tx = transactions.find((t) => t.id === id);
     if (!tx) return;
@@ -271,6 +289,7 @@ export default function TransactionsPage() {
         date: editDate,
       };
       if (editType === 'personal') payload.userId = editUserId;
+      else payload.userId = null;
 
       const res = await fetch(`${BACKEND_URL}/api/transactions/${editingId}`, {
         method: 'PUT',
@@ -286,7 +305,8 @@ export default function TransactionsPage() {
       setEditOpen(false);
       setEditingId('');
       setEditSaving(false);
-      setPage(1);
+      setPageError('');
+      await loadTransactions({ silent: true });
     } catch (e: any) {
       setEditError(e?.message || 'Failed to update transaction.');
       setEditSaving(false);
@@ -564,7 +584,7 @@ export default function TransactionsPage() {
                   onChange={(e) => setEditCategory(e.target.value)}
                   style={{ width: '100%', background: '#111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '12px 14px', color: '#fff', outline: 'none' }}
                 >
-                  {(EDIT_CATEGORIES[editType] as unknown as string[]).map((c) => (
+                  {editCategoryOptions.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>

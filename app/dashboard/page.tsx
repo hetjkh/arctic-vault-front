@@ -535,8 +535,8 @@ export default function DashboardPage() {
     const allocatedMy = (currentPool + totalW) / 2;
     const allocatedPartner = allocatedMy; // equal split
 
-    const myRemainingAllowance = Math.max(0, allocatedMy - myW);
-    const partnerRemainingAllowance = Math.max(0, allocatedPartner - partnerW);
+    const myRemainingAllowance = Math.round((allocatedMy - myW) * 100) / 100;
+    const partnerRemainingAllowance = Math.round((allocatedPartner - partnerW) * 100) / 100;
 
     // If logged in is Ronit, show Ronit as myRemaining and Het as partnerRemaining.
     // If logged in is Het, swap them.
@@ -866,12 +866,12 @@ export default function DashboardPage() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(200,180,255,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#0d0d0d' }}>Ronit allowance</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.ronitAllowance))}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: derived.ronitAllowance < 0 ? '#b00020' : '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.ronitAllowance))}</div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(150,255,190,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#0d0d0d' }}>Het allowance</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.hetAllowance))}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: derived.hetAllowance < 0 ? '#b00020' : '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.hetAllowance))}</div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1158,7 +1158,7 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
             {[
               { label: 'My Share', val: formatCompact(derived.myBal.totalIncome / 2), color: '#00ff41', icon: ArrowDownLeft },
-              { label: 'Allowance', val: formatCurrency2(derived.myAllowance), color: '#00ff41', icon: Wallet },
+              { label: 'Allowance', val: formatCurrency2(derived.myAllowance), color: derived.myAllowance < 0 ? '#ff0033' : '#00ff41', icon: Wallet },
               { label: 'Net', val: formatCompact(derived.netProfit), color: derived.netProfit >= 0 ? '#00ff41' : '#ff0033', icon: ArrowUpRight },
             ].map(({ label, val, color, icon: Icon }) => (
               <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.07)', padding: '14px 12px' }}>
@@ -1282,7 +1282,7 @@ export default function DashboardPage() {
                 { label: 'My Balance',     val: formatCurrency(derived.myBal.balance),                       color: derived.myBal.balance >= 0 ? '#00ff41' : '#ff0033' },
                 { label: 'Income Share',   val: formatCurrency(derived.myBal.totalIncome / 2),               color: '#00ff41'  },
                 { label: 'Expense Share',  val: formatCurrency(derived.myBal.totalSharedExpenses / 2),       color: '#ff0033'  },
-                { label: 'Allowance',      val: formatCurrency2(derived.myAllowance),                         color: 'rgba(255,255,255,0.5)' },
+                { label: 'Allowance',      val: formatCurrency2(derived.myAllowance),                         color: derived.myAllowance < 0 ? '#ff0033' : 'rgba(255,255,255,0.5)' },
               ].map(({ label, val, color }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                   <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{label}</span>
