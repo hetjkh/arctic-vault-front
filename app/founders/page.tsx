@@ -39,6 +39,7 @@ export default function FoundersPage() {
       amount: number;
       description: string;
       userId?: string;
+      incomeFromUserId?: string;
       date: string;
     }>;
     const backendSettlements = (await settlementsRes.json()) as Array<{
@@ -74,6 +75,8 @@ export default function FoundersPage() {
 
     const mappedTx = backendTx.map((t) => {
       const maybeUserId = t.type === 'personal' && t.userId ? numericByBackendId[String(t.userId)] : undefined;
+      const maybeIncomeFrom =
+        t.type === 'income' && t.incomeFromUserId ? numericByBackendId[String(t.incomeFromUserId)] : undefined;
       return {
         id: t.id,
         type: t.type,
@@ -81,6 +84,7 @@ export default function FoundersPage() {
         amount: t.amount,
         description: t.description || '',
         userId: maybeUserId,
+        incomeFromUserId: maybeIncomeFrom,
         date: new Date(t.date).toISOString(),
       };
     });
@@ -199,7 +203,7 @@ export default function FoundersPage() {
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {[
-          { label: 'Income share', val: `+${formatCurrency(bal.totalIncome / 2)}`, c: '#00ff41' },
+          { label: 'Income credited', val: `+${formatCurrency(bal.incomeCredited)}`, c: '#00ff41' },
           { label: 'Expense share', val: `-${formatCurrency(bal.totalSharedExpenses / 2)}`, c: '#ff0033' },
           { label: 'Withdrawals', val: `-${formatCurrency(bal.totalPersonalWithdrawals)}`, c: 'rgba(255,255,255,0.5)' },
         ].map(({ label, val, c }) => (

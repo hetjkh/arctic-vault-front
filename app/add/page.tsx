@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { TransactionType } from '@/types';
 import { formatCurrency } from '@/lib/calculations';
@@ -27,6 +27,9 @@ export default function AddTransactionPage() {
   const [category, setCategory] = useState(categories.income[0]);
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10)); // YYYY-MM-DD
+  const dateRef = useRef<HTMLInputElement | null>(null);
+  /** When set on income: full amount credits this founder only (API: incomeFromUserId). */
+  const [incomeFounderId, setIncomeFounderId] = useState('');
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([]);
   const [userId, setUserId] = useState('');
   const [sessionUserId, setSessionUserId] = useState('');
@@ -77,7 +80,7 @@ export default function AddTransactionPage() {
     loadUsersAndSession();
   }, [router]);
 
-  useEffect(() => { setCategory(categories[type][0]); }, [type]);
+  useEffect(() => { setCategory(categories[type][0]); if (type !== 'income') setIncomeFounderId(''); }, [type]);
 
   const amountNum = parseFloat(amount) || 0;
   const cfg = TYPE_CONFIG[type];
@@ -88,7 +91,13 @@ export default function AddTransactionPage() {
     const a = founders[0] || 'Founder A';
     const b = founders[1] || 'Founder B';
     const name = users.find((u) => u.id === userId)?.name || 'selected founder';
-    if (type === 'income') return `Splits equally — ${a} ${formatCurrency(amountNum / 2)} + ${b} ${formatCurrency(amountNum / 2)}`;
+    if (type === 'income') {
+      if (incomeFounderId) {
+        const fn = users.find((u) => u.id === incomeFounderId)?.name || 'founder';
+        return `Full credit to ${fn} — ${formatCurrency(amountNum)} (not split 50/50)`;
+      }
+      return `Splits equally — ${a} ${formatCurrency(amountNum / 2)} + ${b} ${formatCurrency(amountNum / 2)}`;
+    }
     if (type === 'expense') return `Deducts ${formatCurrency(amountNum / 2)} from each founder`;
     return `Deducts ${formatCurrency(amountNum)} from ${name} only`;
   })();
@@ -100,6 +109,7 @@ export default function AddTransactionPage() {
     setError('');
     const payload: Record<string, unknown> = { type, amount: amountNum, category, description, date };
     if (type === 'personal') payload.userId = userId;
+    if (type === 'income' && incomeFounderId) payload.incomeFromUserId = incomeFounderId;
     const res = await fetch(`${BACKEND_URL}/api/transactions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -195,6 +205,26 @@ export default function AddTransactionPage() {
             <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What's this for?" style={inputStyle} />
           </div>
 
+          {type === 'income' && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                Who gets this income?
+              </p>
+              <select
+                value={incomeFounderId}
+                onChange={(e) => setIncomeFounderId(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                <option value="">Both founders — 50/50 (default)</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} only — full amount (e.g. putting money back)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Date (expense + others) */}
           <div style={{ marginBottom: 14 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
@@ -204,7 +234,13 @@ export default function AddTransactionPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              style={inputStyle}
+              ref={dateRef}
+              onClick={() => {
+                // Some Chromium builds won't open the picker reliably from styled inputs.
+                // showPicker is supported in modern Chrome/Edge.
+                try { dateRef.current?.showPicker?.(); } catch {}
+              }}
+              style={{ ...inputStyle, cursor: 'pointer' }}
               required
             />
           </div>

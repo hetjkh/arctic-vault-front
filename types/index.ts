@@ -18,6 +18,8 @@ export interface Transaction {
   amount: number;
   description: string;
   userId?: number | string; // only for personal transactions
+  /** When set on income: full amount credits this founder only (not 50/50). */
+  incomeFromUserId?: number | string;
   date: string; // ISO8601
   invoiceId?: string; // if auto-created from invoice payment
 }
@@ -104,7 +106,10 @@ export interface DBData {
 export interface FounderBalance {
   userId: number;
   name: string;
+  /** Sum of all income transactions (company-wide). */
   totalIncome: number;
+  /** This founder's credited income: half of split income + full sole-founder income. */
+  incomeCredited: number;
   totalSharedExpenses: number;
   totalPersonalWithdrawals: number;
   settlementsReceived: number;

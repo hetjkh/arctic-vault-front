@@ -9,13 +9,14 @@ import { BACKEND_URL } from '@/lib/backend';
 import Link from 'next/link';
 import { Plus, X } from 'lucide-react';
 
-type FilterValue = TransactionType | 'all' | 'mine' | 'shared';
+type FilterValue = TransactionType | 'all' | 'mine' | 'shared' | 'incomeFounder';
 
 const FILTERS: { label: string; value: FilterValue }[] = [
   { label: 'All', value: 'all' },
   { label: 'Mine', value: 'mine' },
   { label: 'Shared', value: 'shared' },
   { label: 'Income', value: 'income' },
+  { label: 'Founder income', value: 'incomeFounder' },
   { label: 'Expense', value: 'expense' },
   { label: 'Personal', value: 'personal' },
 ];
@@ -60,6 +61,7 @@ export default function TransactionsPage() {
   const [editDescription, setEditDescription] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editUserId, setEditUserId] = useState('');
+  const [editIncomeFromUserId, setEditIncomeFromUserId] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -142,6 +144,9 @@ export default function TransactionsPage() {
       if (filter === 'mine') {
         params.set('mode', 'mine');
         params.set('mineUserId', backendUserId || '');
+      } else if (filter === 'incomeFounder') {
+        params.set('type', 'income');
+        params.set('incomeSource', 'founder');
       } else if (filter === 'shared') {
         params.set('type', 'shared');
       } else if (filter === 'all') {
@@ -235,13 +240,20 @@ export default function TransactionsPage() {
   }, [loadTransactions, backendUserId, filter, page]);
 
   const displayedTransactions = useMemo(() => {
-    if (filter !== 'mine') return transactions;
-    // Mine view: personal = full, shared = half
-    return transactions.map((t) => {
-      if (t.type === 'income' || t.type === 'expense') return { ...t, amount: t.amount / 2 };
-      return t;
-    });
-  }, [transactions, filter]);
+    if (filter !== 'mine' || !backendUserId) return transactions;
+    return transactions
+      .filter((t) => {
+        if (t.type === 'income' && t.incomeFromUserId) {
+          return String(t.incomeFromUserId) === String(backendUserId);
+        }
+        return true;
+      })
+      .map((t) => {
+        if (t.type === 'income' && t.incomeFromUserId) return t;
+        if (t.type === 'income' || t.type === 'expense') return { ...t, amount: t.amount / 2 };
+        return t;
+      });
+  }, [transactions, filter, backendUserId]);
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -262,6 +274,7 @@ export default function TransactionsPage() {
     setEditDescription(tx.description || '');
     setEditDate(String(tx.date || '').slice(0, 10));
     setEditUserId(tx.userId ? String(tx.userId) : '');
+    setEditIncomeFromUserId(tx.incomeFromUserId ? String(tx.incomeFromUserId) : '');
     setEditError('');
     setEditSaving(false);
   };
@@ -290,6 +303,11 @@ export default function TransactionsPage() {
       };
       if (editType === 'personal') payload.userId = editUserId;
       else payload.userId = null;
+      if (editType === 'income') {
+        payload.incomeFromUserId = editIncomeFromUserId.trim() ? editIncomeFromUserId.trim() : null;
+      } else {
+        payload.incomeFromUserId = null;
+      }
 
       const res = await fetch(`${BACKEND_URL}/api/transactions/${editingId}`, {
         method: 'PUT',
@@ -325,6 +343,7 @@ export default function TransactionsPage() {
   const filterColor = (value: FilterValue, isActive: boolean) => {
     if (!isActive) return { color: 'rgba(255,255,255,0.35)', background: 'transparent', border: '1.5px solid rgba(255,255,255,0.1)' };
     if (value === 'income') return { color: '#000', background: '#00ff41', border: '1.5px solid #00ff41', boxShadow: '0 0 10px rgba(0,255,65,0.3)' };
+    if (value === 'incomeFounder') return { color: '#000', background: '#7ec8ff', border: '1.5px solid #7ec8ff', boxShadow: '0 0 10px rgba(126,200,255,0.35)' };
     if (value === 'expense') return { color: '#fff', background: '#ff0033', border: '1.5px solid #ff0033', boxShadow: '0 0 10px rgba(255,0,51,0.3)' };
     if (value === 'mine' || value === 'shared') return { color: '#000', background: '#00ff41', border: '1.5px solid #00ff41', boxShadow: '0 0 10px rgba(0,255,65,0.3)' };
     return { color: '#000', background: '#ffffff', border: '1.5px solid #fff' };
@@ -451,6 +470,11 @@ export default function TransactionsPage() {
               key={tx.id}
               transaction={tx}
               userName={tx.userId ? usersMap[String(tx.userId)] : undefined}
+              incomeFromUserName={
+                tx.type === 'income' && tx.incomeFromUserId
+                  ? usersMap[String(tx.incomeFromUserId)]
+                  : undefined
+              }
               onDelete={handleDelete}
               onEdit={(id) => openEditById(id)}
               currentUserId={backendUserId ?? undefined}
@@ -551,6 +575,7 @@ export default function TransactionsPage() {
                     const next = e.target.value as TransactionType;
                     setEditType(next);
                     if (next !== 'personal') setEditUserId('');
+                    if (next !== 'income') setEditIncomeFromUserId('');
                     if (next === 'personal' && !editUserId && usersList[0]?.id) setEditUserId(usersList[0].id);
                     setEditCategory(EDIT_CATEGORIES[next][0]);
                   }}
@@ -616,6 +641,26 @@ export default function TransactionsPage() {
                   required
                 />
               </div>
+
+              {editType === 'income' && (
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.35)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Income credit
+                  </label>
+                  <select
+                    value={editIncomeFromUserId}
+                    onChange={(e) => setEditIncomeFromUserId(e.target.value)}
+                    style={{ width: '100%', background: '#111', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '12px 14px', color: '#fff', outline: 'none' }}
+                  >
+                    <option value="">Shared — 50/50 between founders</option>
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        Full amount to {u.name} only (not split)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {editType === 'personal' && (
                 <div style={{ gridColumn: 'span 2' }}>

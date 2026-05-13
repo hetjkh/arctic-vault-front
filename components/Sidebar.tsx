@@ -11,12 +11,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  BookOpen,
+  ClipboardList,
 } from 'lucide-react';
 import { useState } from 'react';
 import { getSession } from '@/lib/auth';
 
 const navItems = [
   { href: '/dashboard',    label: 'Dashboard',       icon: LayoutDashboard },
+  { href: '/money-guide',  label: 'Money guide',     icon: BookOpen },
+  { href: '/money-lists',  label: 'Income & lists',  icon: ClipboardList },
   { href: '/transactions', label: 'Transactions',     icon: ArrowLeftRight },
   { href: '/add',          label: 'Add Transaction',  icon: PlusCircle },
   { href: '/invoices',     label: 'Invoices',         icon: FileText },

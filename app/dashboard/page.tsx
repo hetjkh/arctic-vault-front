@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { DBData, TransactionType } from '@/types';
+import { DBData, FounderBalance, TransactionType } from '@/types';
 import {
   calcFounderBalance,
+  calcFinanceBreakdown,
   calcTotalRevenue,
   calcTotalExpenses,
   calcNetProfit,
@@ -15,6 +16,7 @@ import { getSession, clearSession, SessionUser } from '@/lib/auth';
 import TransactionItem from '@/components/TransactionItem';
 import Link from 'next/link';
 import { BACKEND_URL } from '@/lib/backend';
+import { mapBackendToDbData, type BackendSettlement, type BackendTx, type BackendUser } from '@/lib/mapBackendToDbData';
 import {
   ChevronRight, LogOut, ArrowDownLeft, ArrowUpRight,
   Wallet, TrendingUp, TrendingDown, Activity,
@@ -310,6 +312,7 @@ export default function DashboardPage() {
   const [loading,     setLoading]     = useState(true);
   const [hidden,      setHidden]      = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showAllowanceMath, setShowAllowanceMath] = useState(false);
 
   // Dashboard scope filters
   const [rangeMode, setRangeMode] = useState<'all' | 'thisMonth' | 'thisYear' | 'last6Months' | 'custom'>('all');
@@ -329,80 +332,16 @@ export default function DashboardPage() {
         fetch(`${BACKEND_URL}/api/settlements`),
       ]);
 
-      const backendUsers = (await usersRes.json()) as Array<{
-        id: string;
-        username: string;
-        fullName: string;
-      }>;
-      const backendTx = (await txRes.json()) as Array<{
-        id: string;
-        type: 'income' | 'expense' | 'personal';
-        category: string;
-        amount: number;
-        description: string;
-        userId?: string;
-        date: string;
-      }>;
-      const backendSettlements = (await settlementsRes.json()) as Array<{
-        id: string;
-        fromUserId: string;
-        toUserId: string;
-        amount: number;
-        note?: string;
-        date: string;
-      }>;
+      const backendUsers = (await usersRes.json()) as BackendUser[];
+      const backendTx = (await txRes.json()) as BackendTx[];
+      const backendSettlements = (await settlementsRes.json()) as BackendSettlement[];
 
-      // Stable mapping of backend ObjectIds -> numeric ids for existing calc* functions.
-      const sorted = [...backendUsers].sort((a, b) =>
-        (a.fullName || a.username).localeCompare(b.fullName || b.username)
+      const { data: mappedPayload, sortedBackendUsers: sorted, numericByBackendId } = mapBackendToDbData(
+        backendUsers,
+        backendTx,
+        backendSettlements
       );
-      const numericByBackendId: Record<string, number> = {};
-      sorted.forEach((u, idx) => {
-        numericByBackendId[u.id] = idx + 1;
-      });
-
-      const mappedUsers = sorted.map((u) => {
-        const displayName = (u.fullName || u.username).trim();
-        const firstName = displayName.split(' ')[0] || displayName;
-        return {
-          id: numericByBackendId[u.id],
-          name: firstName,
-          fullName: u.fullName || u.username,
-        };
-      });
-
-      const mappedTx: DBData['transactions'] = backendTx.map((t) => {
-        const mappedUserId =
-          t.type === 'personal' && t.userId
-            ? numericByBackendId[String(t.userId)]
-            : undefined;
-
-        return {
-          id: t.id,
-          type: t.type,
-          category: t.category,
-          amount: t.amount,
-          description: t.description || '',
-          userId: mappedUserId,
-          date: new Date(t.date).toISOString(),
-        };
-      });
-
-      const mappedSettlements: DBData['settlements'] = backendSettlements
-        .map((s) => {
-          const fromN = numericByBackendId[String(s.fromUserId)];
-          const toN = numericByBackendId[String(s.toUserId)];
-          if (fromN === undefined || toN === undefined) return null;
-          return {
-            id: s.id,
-            fromUserId: fromN,
-            toUserId: toN,
-            amount: s.amount,
-            note: s.note || '',
-            date: new Date(s.date).toISOString(),
-          };
-        })
-        .filter(Boolean) as DBData['settlements'];
+      const mappedUsers = mappedPayload.users;
 
       const sessionAny = session as any;
       const backendUserId = sessionAny.backendUserId as string | undefined;
@@ -433,12 +372,7 @@ export default function DashboardPage() {
         backendUserId: backendUserId,
         username: (sessionAny.username ?? null) || undefined,
       });
-      setData({
-        users: mappedUsers,
-        transactions: mappedTx,
-        invoices: [],
-        settlements: mappedSettlements,
-      });
+      setData(mappedPayload);
       setLoading(false);
     };
 
@@ -512,23 +446,45 @@ export default function DashboardPage() {
       settlements: scopedSettlements,
     };
 
-    const isRonit     = (user.fullName || '').toLowerCase().includes('ronit');
-    const myBal       = calcFounderBalance(user.id, scopeData);
+    const isRonit     = (user.fullName || user.name || '').toLowerCase().includes('ronit');
+
     const partnerUser = scopeData.users.find((u) => u.id !== user.id) ?? scopeData.users[0];
-    const partnerBal  = partnerUser ? calcFounderBalance(partnerUser.id, scopeData) : myBal;
+
+    const founderBalances = scopeData.users.map((u) => calcFounderBalance(u.id, scopeData));
+    const balanceById = new Map<number, FounderBalance>();
+    founderBalances.forEach((b) => balanceById.set(Number(b.userId), b));
+
+    const myBal       = balanceById.get(Number(user.id)) ?? calcFounderBalance(user.id, scopeData);
+    const partnerBal  = partnerUser ? (balanceById.get(Number(partnerUser.id)) ?? calcFounderBalance(partnerUser.id, scopeData)) : myBal;
+
+    const findFounderId = (needle: string) => {
+      const n = needle.toLowerCase();
+      const u = scopeData.users.find((x) => (x.fullName || x.name || '').toLowerCase().includes(n));
+      return u?.id;
+    };
+    const ronitId = findFounderId('ronit') ?? scopeData.users[0]?.id;
+    const hetId = findFounderId('het') ?? scopeData.users[1]?.id ?? scopeData.users[0]?.id;
+    const ronitBal = ronitId != null ? (balanceById.get(Number(ronitId)) ?? null) : null;
+    const hetBal = hetId != null ? (balanceById.get(Number(hetId)) ?? null) : null;
     const revenue     = calcTotalRevenue(scopeData);
     const expenses    = calcTotalExpenses(scopeData);
     const netProfit   = calcNetProfit(scopeData);
+    const financeBreakdown = calcFinanceBreakdown(scopeData);
 
     const bankMin = 50000;
     const companyBank = myBal.balance + partnerBal.balance;
+    const bankDeficit = Math.max(0, bankMin - companyBank);
     // Current pool available above the bank minimum
     const currentPool = Math.max(0, companyBank - bankMin);
 
     // Withdrawals already taken by each founder (within current scoped filter)
-    const myW = myBal.totalPersonalWithdrawals;
-    const partnerW = partnerBal.totalPersonalWithdrawals;
-    const totalW = myW + partnerW;
+    const withdrawalsById = new Map<number, number>();
+    founderBalances.forEach((b) => withdrawalsById.set(Number(b.userId), b.totalPersonalWithdrawals));
+    const myW = withdrawalsById.get(Number(user.id)) ?? myBal.totalPersonalWithdrawals;
+    const partnerW = partnerUser
+      ? (withdrawalsById.get(Number(partnerUser.id)) ?? partnerBal.totalPersonalWithdrawals)
+      : partnerBal.totalPersonalWithdrawals;
+    const totalW = Array.from(withdrawalsById.values()).reduce((s, v) => Math.round((s + v) * 100) / 100, 0);
 
     // Reconstruct each founder's "credited" allowance allocation so if one founder
     // uses from their allowance, the other founder's remaining allowance is unchanged.
@@ -538,12 +494,19 @@ export default function DashboardPage() {
     const myRemainingAllowance = Math.round((allocatedMy - myW) * 100) / 100;
     const partnerRemainingAllowance = Math.round((allocatedPartner - partnerW) * 100) / 100;
 
-    // If logged in is Ronit, show Ronit as myRemaining and Het as partnerRemaining.
-    // If logged in is Het, swap them.
-    const ronitAllowance = isRonit ? myRemainingAllowance : partnerRemainingAllowance;
-    const hetAllowance = isRonit ? partnerRemainingAllowance : myRemainingAllowance;
-    const myAllowance = myRemainingAllowance;
-    const partnerAllowance = partnerRemainingAllowance;
+    const allocatedEach = Math.round(allocatedMy * 100) / 100;
+    const remainingById = new Map<number, number>();
+    founderBalances.forEach((b) => {
+      const w = withdrawalsById.get(Number(b.userId)) ?? 0;
+      remainingById.set(Number(b.userId), Math.round((allocatedEach - w) * 100) / 100);
+    });
+
+    const ronitAllowance = ronitId != null ? (remainingById.get(Number(ronitId)) ?? 0) : 0;
+    const hetAllowance = hetId != null ? (remainingById.get(Number(hetId)) ?? 0) : 0;
+    const myAllowance = remainingById.get(Number(user.id)) ?? myRemainingAllowance;
+    const partnerAllowance = partnerUser
+      ? (remainingById.get(Number(partnerUser.id)) ?? partnerRemainingAllowance)
+      : partnerRemainingAllowance;
     const totalBalance = companyBank;
 
     const recentSorted = [...scopeData.transactions].sort((a, b) => {
@@ -570,8 +533,9 @@ export default function DashboardPage() {
     return {
       isRonit, myBal, partnerUser, partnerBal, revenue, expenses, netProfit, recent,
       topCat, monthStats, months6, catBreakdown, userMap, greeting, profitMargin,
-      avgTxSize, totalTx,
-      bankMin, companyBank,
+      avgTxSize, totalTx, financeBreakdown,
+      bankMin, companyBank, bankDeficit, currentPool, totalW, allocatedEach, ronitId, hetId,
+      ronitBal, hetBal,
       ronitAllowance, hetAllowance, totalBalance,
       myAllowance, partnerAllowance,
     };
@@ -864,6 +828,40 @@ export default function DashboardPage() {
               minHeight: 130,
             }}
           >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 2 }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Allowance checker
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Link
+                  href="/money-guide"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: 'rgba(120,200,255,0.95)',
+                    textDecoration: 'none',
+                    borderBottom: '1px solid rgba(120,200,255,0.35)',
+                  }}
+                >
+                  Easy guide
+                </Link>
+                <button
+                  onClick={() => setShowAllowanceMath(true)}
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    color: 'rgba(255,255,255,0.7)',
+                    padding: '6px 10px',
+                    borderRadius: 999,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  See calculations
+                </button>
+              </div>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(200,180,255,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#0d0d0d' }}>Ronit allowance</div>
               <div style={{ fontSize: 14, fontWeight: 900, color: derived.ronitAllowance < 0 ? '#b00020' : '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.ronitAllowance))}</div>
@@ -874,9 +872,23 @@ export default function DashboardPage() {
               <div style={{ fontSize: 14, fontWeight: 900, color: derived.hetAllowance < 0 ? '#b00020' : '#0d0d0d', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.hetAllowance))}</div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderRadius: 14, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.95)' }}>Minimum balance</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: 'rgba(255,255,255,0.95)', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(derived.bankMin))}</div>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 12px', borderRadius: 14,
+              background: derived.bankDeficit > 0 ? 'rgba(255,0,51,0.16)' : 'rgba(255,255,255,0.10)',
+              border: `1px solid ${derived.bankDeficit > 0 ? 'rgba(255,0,51,0.28)' : 'rgba(255,255,255,0.08)'}`,
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.95)' }}>Minimum balance</div>
+                {derived.bankDeficit > 0 && (
+                  <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,0,51,0.95)' }}>
+                    Below by {mask(formatCurrency2(derived.bankDeficit))} (add money to reach minimum)
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: derived.bankDeficit > 0 ? '#ff0033' : 'rgba(255,255,255,0.95)', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                {mask(formatCurrency2(derived.bankMin))}
+              </div>
             </div>
 
             <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 12px', borderRadius: 14, background: '#000', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -1006,6 +1018,11 @@ export default function DashboardPage() {
                   <TransactionItem
                     key={tx.id} transaction={tx}
                     userName={tx.userId !== undefined ? derived.userMap[String(tx.userId)] : undefined}
+                    incomeFromUserName={
+                      tx.type === 'income' && tx.incomeFromUserId !== undefined
+                        ? derived.userMap[String(tx.incomeFromUserId)]
+                        : undefined
+                    }
                     compact currentUserId={user.id}
                   />
                 ))}
@@ -1157,7 +1174,7 @@ export default function DashboardPage() {
         <div style={{ padding: '0 16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
             {[
-              { label: 'My Share', val: formatCompact(derived.myBal.totalIncome / 2), color: '#00ff41', icon: ArrowDownLeft },
+              { label: 'My Share', val: formatCompact(derived.myBal.incomeCredited), color: '#00ff41', icon: ArrowDownLeft },
               { label: 'Allowance', val: formatCurrency2(derived.myAllowance), color: derived.myAllowance < 0 ? '#ff0033' : '#00ff41', icon: Wallet },
               { label: 'Net', val: formatCompact(derived.netProfit), color: derived.netProfit >= 0 ? '#00ff41' : '#ff0033', icon: ArrowUpRight },
             ].map(({ label, val, color, icon: Icon }) => (
@@ -1234,6 +1251,11 @@ export default function DashboardPage() {
                 <TransactionItem
                   key={tx.id} transaction={tx}
                   userName={tx.userId !== undefined ? derived.userMap[String(tx.userId)] : undefined}
+                  incomeFromUserName={
+                    tx.type === 'income' && tx.incomeFromUserId !== undefined
+                      ? derived.userMap[String(tx.incomeFromUserId)]
+                      : undefined
+                  }
                   compact currentUserId={user.id}
                 />
               ))}
@@ -1280,7 +1302,7 @@ export default function DashboardPage() {
             <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 18, padding: 16, marginBottom: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
               {[
                 { label: 'My Balance',     val: formatCurrency(derived.myBal.balance),                       color: derived.myBal.balance >= 0 ? '#00ff41' : '#ff0033' },
-                { label: 'Income Share',   val: formatCurrency(derived.myBal.totalIncome / 2),               color: '#00ff41'  },
+                { label: 'Income credited', val: formatCurrency(derived.myBal.incomeCredited), color: '#00ff41' },
                 { label: 'Expense Share',  val: formatCurrency(derived.myBal.totalSharedExpenses / 2),       color: '#ff0033'  },
                 { label: 'Allowance',      val: formatCurrency2(derived.myAllowance),                         color: derived.myAllowance < 0 ? '#ff0033' : 'rgba(255,255,255,0.5)' },
               ].map(({ label, val, color }) => (
@@ -1302,6 +1324,183 @@ export default function DashboardPage() {
             >
               <LogOut size={17} /> Switch Account / Log out
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ ALLOWANCE MATH SHEET ═════════════════════════ */}
+      {showAllowanceMath && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(12px)' }}
+          onClick={() => setShowAllowanceMath(false)}
+        >
+          <div
+            style={{
+              position: 'absolute', bottom: 0, left: '50%', transform: 'translateX(-50%)',
+              width: '100%', maxWidth: 720,
+              background: 'rgba(14,14,16,0.98)',
+              backdropFilter: 'blur(32px)',
+              borderRadius: '28px 28px 0 0',
+              border: '1px solid rgba(255,255,255,0.09)',
+              padding: '12px 22px 28px',
+              animation: 'fadeUp 0.25s ease',
+              maxHeight: '86dvh',
+              overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 14px' }} />
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 3 }}>Allowance calculation breakdown</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 700 }}>
+                  Rules: Shared income 50/50 · Founder-only income 100% to one founder · Expense 50/50 · Personal charged to one founder · Settlements adjust founders only
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAllowanceMath(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  color: 'rgba(255,255,255,0.75)',
+                  padding: '8px 10px',
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Company income and 50/50 splits</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 700, marginBottom: 10 }}>
+                  Total income = shared pool (split) + founder-only deposits (not split).
+                </div>
+                {[
+                  { k: 'Total income into company (all income rows)', v: formatCurrency2(derived.financeBreakdown.companyTotalIncome), c: '#00ff41' },
+                  { k: 'Shared income pool (50/50 — no “one founder only”)', v: formatCurrency2(derived.financeBreakdown.splitIncomePool), c: 'rgba(255,255,255,0.85)' },
+                  { k: '→ Each founder from shared income (50%)', v: formatCurrency2(derived.financeBreakdown.incomeHalfFromSharedEach), c: '#00ff41' },
+                  { k: 'Founder-only income total (100% to named founder)', v: formatCurrency2(derived.financeBreakdown.founderOnlyIncomeTotal), c: 'rgba(120,200,255,0.95)' },
+                ].map((row) => (
+                  <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                  </div>
+                ))}
+                {derived.financeBreakdown.founderOnlyIncomePerUser.length > 0 ? (
+                  derived.financeBreakdown.founderOnlyIncomePerUser.map((x) => (
+                    <div key={x.userId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0 6px 10px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)', fontWeight: 700, paddingLeft: 8 }}>→ {x.name} only</div>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(120,200,255,0.95)', fontVariantNumeric: 'tabular-nums' }}>{mask(formatCurrency2(x.amount))}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', padding: '6px 0 8px' }}>No founder-only income in this range.</div>
+                )}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Personal withdrawals (by founder)</div>
+                {[
+                  { k: 'Total personal (all founders)', v: formatCurrency2(derived.financeBreakdown.totalPersonalAllFounders), c: 'rgba(255,255,255,0.85)' },
+                  ...derived.financeBreakdown.personalPerUser.map((p) => ({
+                    k: `${p.name} (${p.userId}) personal`,
+                    v: formatCurrency2(p.amount),
+                    c: p.amount > 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.25)',
+                  })),
+                ].map((row) => (
+                  <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Shared expenses (50/50)</div>
+                {[
+                  { k: 'Total company expenses (shared)', v: formatCurrency2(derived.financeBreakdown.totalExpenses), c: '#ff0033' },
+                  { k: '→ Each founder’s share (50%)', v: formatCurrency2(derived.financeBreakdown.expenseShareEach), c: '#ff3355' },
+                ].map((row) => (
+                  <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Company bank + minimum rule</div>
+                {[
+                  { k: 'Company bank (Ronit bal + Het bal)', v: formatCurrency2(derived.companyBank), c: derived.companyBank >= 0 ? 'rgba(255,255,255,0.85)' : '#ff0033' },
+                  { k: 'Minimum balance', v: formatCurrency2(derived.bankMin), c: 'rgba(255,255,255,0.7)' },
+                  { k: 'Pool above minimum (max(0, bank − min))', v: formatCurrency2(derived.currentPool), c: derived.currentPool > 0 ? '#00ff41' : 'rgba(255,255,255,0.7)' },
+                  ...(derived.bankDeficit > 0 ? [{ k: 'Below minimum (min − bank)', v: formatCurrency2(derived.bankDeficit), c: '#ff0033' }] : []),
+                ].map((row) => (
+                  <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Allowance distribution (per-founder)</div>
+                {[
+                  { k: 'Total personal withdrawals (Ronit + Het)', v: formatCurrency2(derived.totalW), c: 'rgba(255,255,255,0.8)' },
+                  { k: 'Allocated per founder ((pool + withdrawals) / 2)', v: formatCurrency2(derived.allocatedEach), c: 'rgba(255,255,255,0.85)' },
+                  { k: 'Ronit remaining allowance', v: formatCurrency2(derived.ronitAllowance), c: derived.ronitAllowance < 0 ? '#ff0033' : '#00ff41' },
+                  { k: 'Het remaining allowance', v: formatCurrency2(derived.hetAllowance), c: derived.hetAllowance < 0 ? '#ff0033' : '#00ff41' },
+                ].map((row) => (
+                  <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Founder balances (sanity check)</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 700, marginBottom: 10 }}>
+                  Each founder balance = (income credited to you) − (Expense/2) − (their personal) + settlements received − settlements paid. Income credited = half of shared income + 100% of income marked to one founder only.
+                </div>
+                {[
+                  { label: 'Ronit', bal: derived.ronitBal },
+                  { label: 'Het', bal: derived.hetBal },
+                ].map(({ label, bal }) => (
+                  <div key={label} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 900 }}>{label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 1000, color: bal && bal.balance < 0 ? '#ff0033' : '#00ff41', fontVariantNumeric: 'tabular-nums' }}>
+                        {mask(formatCurrency2(bal?.balance ?? 0))}
+                      </div>
+                    </div>
+                    {bal && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {[
+                          { k: 'Income credited', v: formatCurrency2(bal.incomeCredited), c: '#00ff41' },
+                          { k: 'Expense share', v: formatCurrency2(bal.totalSharedExpenses / 2), c: '#ff0033' },
+                          { k: 'Personal', v: formatCurrency2(bal.totalPersonalWithdrawals), c: 'rgba(255,255,255,0.75)' },
+                          { k: 'Settlements (net)', v: formatCurrency2(bal.settlementsReceived - bal.settlementsPaid), c: 'rgba(255,255,255,0.75)' },
+                        ].map((row) => (
+                          <div key={row.k} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 14, padding: 10 }}>
+                            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{row.k}</div>
+                            <div style={{ fontSize: 12, fontWeight: 900, color: row.c, fontVariantNumeric: 'tabular-nums' }}>{mask(row.v)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 10 }}>
+                  Tip: use the dashboard “Range / Type” filters to validate a specific month or category.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

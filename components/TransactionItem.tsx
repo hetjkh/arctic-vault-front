@@ -5,6 +5,8 @@ import { Pencil, Trash2 } from 'lucide-react';
 interface TransactionItemProps {
   transaction: Transaction;
   userName?: string;
+  /** When income is credited to one founder only (not 50/50). */
+  incomeFromUserName?: string;
   onDelete?: (id: string) => void;
   onEdit?: (id: string) => void;
   compact?: boolean;
@@ -39,7 +41,7 @@ function formatDate(iso: string): string {
 }
 
 export default function TransactionItem({
-  transaction, userName, onDelete, onEdit, compact = false, currentUserId,
+  transaction, userName, incomeFromUserName, onDelete, onEdit, compact = false, currentUserId,
 }: TransactionItemProps) {
   const config = typeConfig[transaction.type];
   const isMine = transaction.type === 'personal'
@@ -87,6 +89,11 @@ export default function TransactionItem({
           </p>
           {isMine && (
             <span style={{ fontSize: 9, fontWeight: 700, color: '#00ff41', background: 'rgba(0,255,65,0.1)', border: '1px solid rgba(0,255,65,0.25)', borderRadius: 6, padding: '1px 5px', letterSpacing: '0.05em', flexShrink: 0 }}>YOU</span>
+          )}
+          {transaction.type === 'income' && incomeFromUserName && (
+            <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(120,200,255,0.95)', background: 'rgba(120,200,255,0.12)', border: '1px solid rgba(120,200,255,0.35)', borderRadius: 6, padding: '1px 5px', letterSpacing: '0.04em', flexShrink: 0 }}>
+              {incomeFromUserName} only
+            </span>
           )}
           {isShared && currentUserId && (
             <span style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.25)', flexShrink: 0 }}>shared</span>

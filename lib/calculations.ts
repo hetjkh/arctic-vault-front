@@ -13,11 +13,100 @@ function sameUserId(a: number | string | undefined | null, b: number): boolean {
   return Number.isFinite(na) && Number.isFinite(nb) && na === nb;
 }
 
+function isSoleFounderIncome(t: { type: string; incomeFromUserId?: number | string }): boolean {
+  return t.type === 'income' && t.incomeFromUserId != null && String(t.incomeFromUserId).length > 0;
+}
+
+export interface FinanceBreakdown {
+  /** Sum of all income transactions (cash in). */
+  companyTotalIncome: number;
+  /** Income that is split 50/50 between founders (no `incomeFromUserId`). */
+  splitIncomePool: number;
+  /** Each founder’s half of `splitIncomePool`. */
+  incomeHalfFromSharedEach: number;
+  /** Sum of income rows credited 100% to one founder. */
+  founderOnlyIncomeTotal: number;
+  /** Per-founder totals for founder-only income rows. */
+  founderOnlyIncomePerUser: { userId: number; name: string; amount: number }[];
+  /** Sum of all shared expense transactions. */
+  totalExpenses: number;
+  /** Each founder’s half of shared expenses. */
+  expenseShareEach: number;
+  /** Sum of all personal withdrawals. */
+  totalPersonalAllFounders: number;
+  /** Per-founder personal withdrawal totals. */
+  personalPerUser: { userId: number; name: string; amount: number }[];
+}
+
+/**
+ * Human-readable company ledger: total income, per-founder withdrawals, and 50/50 split lines.
+ */
+export function calcFinanceBreakdown(data: DBData): FinanceBreakdown {
+  const incomeTxs = data.transactions.filter((t) => t.type === 'income');
+  const companyTotalIncome = incomeTxs.reduce((sum, t) => r(sum + t.amount), 0);
+
+  const splitIncomePool = incomeTxs
+    .filter((t) => !isSoleFounderIncome(t))
+    .reduce((sum, t) => r(sum + t.amount), 0);
+  const incomeHalfFromSharedEach = r(splitIncomePool / 2);
+
+  const founderOnlyTxs = incomeTxs.filter((t) => isSoleFounderIncome(t));
+  const founderOnlyIncomeTotal = founderOnlyTxs.reduce((sum, t) => r(sum + t.amount), 0);
+
+  const founderOnlyIncomePerUser = data.users
+    .map((u) => {
+      const amount = founderOnlyTxs
+        .filter((t) => sameUserId(t.incomeFromUserId, u.id))
+        .reduce((sum, t) => r(sum + t.amount), 0);
+      return {
+        userId: u.id,
+        name: u.name || u.fullName || 'User',
+        amount,
+      };
+    })
+    .filter((x) => x.amount > 0);
+
+  const expenseTxs = data.transactions.filter((t) => t.type === 'expense');
+  const totalExpenses = expenseTxs.reduce((sum, t) => r(sum + t.amount), 0);
+  const expenseShareEach = r(totalExpenses / 2);
+
+  const personalPerUser = data.users.map((u) => {
+    const amount = data.transactions
+      .filter((t) => t.type === 'personal' && sameUserId(t.userId, u.id))
+      .reduce((sum, t) => r(sum + t.amount), 0);
+    return {
+      userId: u.id,
+      name: u.name || u.fullName || 'User',
+      amount,
+    };
+  });
+  const totalPersonalAllFounders = personalPerUser.reduce((s, p) => r(s + p.amount), 0);
+
+  return {
+    companyTotalIncome,
+    splitIncomePool,
+    incomeHalfFromSharedEach,
+    founderOnlyIncomeTotal,
+    founderOnlyIncomePerUser,
+    totalExpenses,
+    expenseShareEach,
+    totalPersonalAllFounders,
+    personalPerUser,
+  };
+}
+
 export function calcFounderBalance(userId: number, data: DBData): FounderBalance {
   const user = data.users.find((u) => Number(u.id) === Number(userId));
 
-  const totalIncome = data.transactions
-    .filter((t) => t.type === 'income')
+  const incomeTxs = data.transactions.filter((t) => t.type === 'income');
+  const totalIncome = incomeTxs.reduce((sum, t) => r(sum + t.amount), 0);
+
+  const splitIncomePool = incomeTxs
+    .filter((t) => !isSoleFounderIncome(t))
+    .reduce((sum, t) => r(sum + t.amount), 0);
+
+  const soleIncomeForUser = incomeTxs
+    .filter((t) => isSoleFounderIncome(t) && sameUserId(t.incomeFromUserId, userId))
     .reduce((sum, t) => r(sum + t.amount), 0);
 
   const totalSharedExpenses = data.transactions
@@ -36,12 +125,12 @@ export function calcFounderBalance(userId: number, data: DBData): FounderBalance
     .filter((s) => sameUserId(s.fromUserId, userId))
     .reduce((sum, s) => r(sum + s.amount), 0);
 
-  // Use individual rounded halves to avoid e.g. 100.005 floating-point drift
-  const incomeShare   = r(totalIncome / 2);
-  const expenseShare  = r(totalSharedExpenses / 2);
+  // Split income 50/50; sole-founder income 100% to that founder only
+  const incomeCredited = r(r(splitIncomePool / 2) + soleIncomeForUser);
+  const expenseShare = r(totalSharedExpenses / 2);
 
   const balance = r(
-    incomeShare -
+    incomeCredited -
     expenseShare -
     totalPersonalWithdrawals +
     settlementsReceived -
@@ -53,6 +142,7 @@ export function calcFounderBalance(userId: number, data: DBData): FounderBalance
     // Avoid runtime crash if a stale/invalid session userId is passed.
     name: user?.name ?? user?.fullName ?? 'Unknown User',
     totalIncome,
+    incomeCredited,
     totalSharedExpenses,
     totalPersonalWithdrawals,
     settlementsReceived,
