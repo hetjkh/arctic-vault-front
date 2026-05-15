@@ -6,6 +6,8 @@ import { DBData, FounderBalance, TransactionType } from '@/types';
 import {
   calcFounderBalance,
   calcFinanceBreakdown,
+  calcAllowanceState,
+  COMPANY_BANK_MIN,
   calcTotalRevenue,
   calcTotalExpenses,
   calcNetProfit,
@@ -471,42 +473,23 @@ export default function DashboardPage() {
     const netProfit   = calcNetProfit(scopeData);
     const financeBreakdown = calcFinanceBreakdown(scopeData);
 
-    const bankMin = 50000;
-    const companyBank = myBal.balance + partnerBal.balance;
-    const bankDeficit = Math.max(0, bankMin - companyBank);
-    // Current pool available above the bank minimum
-    const currentPool = Math.max(0, companyBank - bankMin);
+    const bankMin = COMPANY_BANK_MIN;
+    // Allowance must use full history (date/type filters would break chronological buckets).
+    const allowanceState = calcAllowanceState(data, bankMin);
+    const companyBank = allowanceState.companyBank;
+    const bankDeficit = allowanceState.bankDeficit;
+    const currentPool = allowanceState.poolAboveMin;
 
-    // Withdrawals already taken by each founder (within current scoped filter)
     const withdrawalsById = new Map<number, number>();
     founderBalances.forEach((b) => withdrawalsById.set(Number(b.userId), b.totalPersonalWithdrawals));
-    const myW = withdrawalsById.get(Number(user.id)) ?? myBal.totalPersonalWithdrawals;
-    const partnerW = partnerUser
-      ? (withdrawalsById.get(Number(partnerUser.id)) ?? partnerBal.totalPersonalWithdrawals)
-      : partnerBal.totalPersonalWithdrawals;
     const totalW = Array.from(withdrawalsById.values()).reduce((s, v) => Math.round((s + v) * 100) / 100, 0);
 
-    // Reconstruct each founder's "credited" allowance allocation so if one founder
-    // uses from their allowance, the other founder's remaining allowance is unchanged.
-    const allocatedMy = (currentPool + totalW) / 2;
-    const allocatedPartner = allocatedMy; // equal split
-
-    const myRemainingAllowance = Math.round((allocatedMy - myW) * 100) / 100;
-    const partnerRemainingAllowance = Math.round((allocatedPartner - partnerW) * 100) / 100;
-
-    const allocatedEach = Math.round(allocatedMy * 100) / 100;
-    const remainingById = new Map<number, number>();
-    founderBalances.forEach((b) => {
-      const w = withdrawalsById.get(Number(b.userId)) ?? 0;
-      remainingById.set(Number(b.userId), Math.round((allocatedEach - w) * 100) / 100);
-    });
-
-    const ronitAllowance = ronitId != null ? (remainingById.get(Number(ronitId)) ?? 0) : 0;
-    const hetAllowance = hetId != null ? (remainingById.get(Number(hetId)) ?? 0) : 0;
-    const myAllowance = remainingById.get(Number(user.id)) ?? myRemainingAllowance;
+    const ronitAllowance = ronitId != null ? (allowanceState.byUserId.get(Number(ronitId))?.allowanceLeft ?? 0) : 0;
+    const hetAllowance = hetId != null ? (allowanceState.byUserId.get(Number(hetId))?.allowanceLeft ?? 0) : 0;
+    const myAllowance = allowanceState.byUserId.get(Number(user.id))?.allowanceLeft ?? 0;
     const partnerAllowance = partnerUser
-      ? (remainingById.get(Number(partnerUser.id)) ?? partnerRemainingAllowance)
-      : partnerRemainingAllowance;
+      ? (allowanceState.byUserId.get(Number(partnerUser.id))?.allowanceLeft ?? 0)
+      : 0;
     const totalBalance = companyBank;
 
     const recentSorted = [...scopeData.transactions].sort((a, b) => {
@@ -534,7 +517,7 @@ export default function DashboardPage() {
       isRonit, myBal, partnerUser, partnerBal, revenue, expenses, netProfit, recent,
       topCat, monthStats, months6, catBreakdown, userMap, greeting, profitMargin,
       avgTxSize, totalTx, financeBreakdown,
-      bankMin, companyBank, bankDeficit, currentPool, totalW, allocatedEach, ronitId, hetId,
+      bankMin, companyBank, bankDeficit, currentPool, totalW, allowanceState, ronitId, hetId,
       ronitBal, hetBal,
       ronitAllowance, hetAllowance, totalBalance,
       myAllowance, partnerAllowance,
@@ -1354,7 +1337,7 @@ export default function DashboardPage() {
               <div>
                 <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 3 }}>Allowance calculation breakdown</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 700 }}>
-                  Rules: Shared income 50/50 · Founder-only income 100% to one founder · Expense 50/50 · Personal charged to one founder · Settlements adjust founders only
+                  Rules: ₹50k minimum bank · Shared income adds 50/50 allowance only above minimum · Personal reduces only that founder · Founder-only income adds to that founder’s allowance (debt + extra, not split) · Expenses affect ledger only
                 </div>
               </div>
               <button
@@ -1449,12 +1432,14 @@ export default function DashboardPage() {
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 18, padding: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Allowance distribution (per-founder)</div>
+                <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.85)', marginBottom: 10 }}>Allowance (per-founder buckets)</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 700, marginBottom: 10 }}>
+                  Shared income above ₹50k adds 50/50 to each founder only. Personal reduces only that founder. Founder-only income adds to that founder’s allowance (clears debt; extra stays positive). Expenses affect ledger only.
+                </div>
                 {[
-                  { k: 'Total personal withdrawals (Ronit + Het)', v: formatCurrency2(derived.totalW), c: 'rgba(255,255,255,0.8)' },
-                  { k: 'Allocated per founder ((pool + withdrawals) / 2)', v: formatCurrency2(derived.allocatedEach), c: 'rgba(255,255,255,0.85)' },
-                  { k: 'Ronit remaining allowance', v: formatCurrency2(derived.ronitAllowance), c: derived.ronitAllowance < 0 ? '#ff0033' : '#00ff41' },
-                  { k: 'Het remaining allowance', v: formatCurrency2(derived.hetAllowance), c: derived.hetAllowance < 0 ? '#ff0033' : '#00ff41' },
+                  { k: 'Pool above minimum (in bank)', v: formatCurrency2(derived.currentPool), c: derived.currentPool > 0 ? '#00ff41' : 'rgba(255,255,255,0.7)' },
+                  { k: 'Ronit allowance left', v: formatCurrency2(derived.ronitAllowance), c: derived.ronitAllowance < 0 ? '#ff0033' : '#00ff41' },
+                  { k: 'Het allowance left', v: formatCurrency2(derived.hetAllowance), c: derived.hetAllowance < 0 ? '#ff0033' : '#00ff41' },
                 ].map((row) => (
                   <div key={row.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>{row.k}</div>

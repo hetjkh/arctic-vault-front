@@ -1,8 +1,167 @@
-import { DBData, FounderBalance } from '@/types';
+import { DBData, FounderBalance, Settlement, Transaction } from '@/types';
+
+/** Company bank must stay at or above this amount before founders get spendable allowance. */
+export const COMPANY_BANK_MIN = 50000;
 
 /** Round to 2 decimal places to avoid floating-point drift */
 function r(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function poolAboveMin(companyBank: number, bankMin: number): number {
+  return r(Math.max(0, companyBank - bankMin));
+}
+
+export interface FounderAllowance {
+  userId: number;
+  name: string;
+  allowanceLeft: number;
+}
+
+export interface AllowanceState {
+  companyBank: number;
+  bankMin: number;
+  bankDeficit: number;
+  poolAboveMin: number;
+  founders: FounderAllowance[];
+  byUserId: Map<number, FounderAllowance>;
+}
+
+type ChronologicalEvent =
+  | { date: string; kind: 'tx'; tx: Transaction }
+  | { date: string; kind: 'settlement'; settlement: Settlement };
+
+function mergeChronologicalEvents(data: DBData): ChronologicalEvent[] {
+  const events: ChronologicalEvent[] = [
+    ...data.transactions.map((tx) => ({ date: tx.date, kind: 'tx' as const, tx })),
+    ...data.settlements.map((settlement) => ({ date: settlement.date, kind: 'settlement' as const, settlement })),
+  ];
+  events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return events;
+}
+
+function sumLedger(ledger: Map<string, number>): number {
+  let total = 0;
+  ledger.forEach((v) => {
+    total = r(total + v);
+  });
+  return total;
+}
+
+function applyPoolDeltaToBuckets(
+  bankBefore: number,
+  bankAfter: number,
+  bankMin: number,
+  buckets: Map<string, number>,
+  userIds: (number | string)[]
+): void {
+  const delta = r(poolAboveMin(bankAfter, bankMin) - poolAboveMin(bankBefore, bankMin));
+  if (delta === 0 || userIds.length === 0) return;
+  const share = r(delta / userIds.length);
+  userIds.forEach((id) => {
+    const k = userKey(id);
+    buckets.set(k, r((buckets.get(k) ?? 0) + share));
+  });
+}
+
+/**
+ * Allowance buckets (processed in date order):
+ * - Shared income: each founder gets half of any *new* pool above the bank minimum.
+ * - Expenses: affect ledger/company bank only (do not change allowance buckets).
+ * - Personal: only that founder's bucket decreases; partner unchanged.
+ * - Founder-only income: adds to that founder's allowance bucket (clears debt, surplus stays positive); not split to partner.
+ * - Settlements: adjust ledger only, not allowance buckets.
+ */
+function userKey(id: number | string): string {
+  return String(id);
+}
+
+export function calcAllowanceState(data: DBData, bankMin: number = COMPANY_BANK_MIN): AllowanceState {
+  const users = data.users;
+  const userIds = users.map((u) => u.id);
+  const n = userIds.length || 1;
+
+  const ledger = new Map<string, number>();
+  const buckets = new Map<string, number>();
+  userIds.forEach((id) => {
+    const k = userKey(id);
+    ledger.set(k, 0);
+    buckets.set(k, 0);
+  });
+
+  const events = mergeChronologicalEvents(data);
+
+  for (const event of events) {
+    if (event.kind === 'settlement') {
+      const { fromUserId, toUserId, amount } = event.settlement;
+      const fromK = userKey(fromUserId);
+      const toK = userKey(toUserId);
+      ledger.set(fromK, r((ledger.get(fromK) ?? 0) - amount));
+      ledger.set(toK, r((ledger.get(toK) ?? 0) + amount));
+      continue;
+    }
+
+    const tx = event.tx;
+    const bankBefore = sumLedger(ledger);
+
+    if (tx.type === 'income') {
+      if (isSoleFounderIncome(tx)) {
+        const uk = userKey(tx.incomeFromUserId!);
+        ledger.set(uk, r((ledger.get(uk) ?? 0) + tx.amount));
+        buckets.set(uk, r((buckets.get(uk) ?? 0) + tx.amount));
+      } else {
+        const half = r(tx.amount / n);
+        userIds.forEach((id) => {
+          const k = userKey(id);
+          ledger.set(k, r((ledger.get(k) ?? 0) + half));
+        });
+        const bankAfter = sumLedger(ledger);
+        applyPoolDeltaToBuckets(bankBefore, bankAfter, bankMin, buckets, userIds);
+      }
+      continue;
+    }
+
+    if (tx.type === 'expense') {
+      const half = r(tx.amount / n);
+      userIds.forEach((id) => {
+        const k = userKey(id);
+        ledger.set(k, r((ledger.get(k) ?? 0) - half));
+      });
+      continue;
+    }
+
+    if (tx.type === 'personal' && tx.userId != null) {
+      const uk = userKey(tx.userId);
+      ledger.set(uk, r((ledger.get(uk) ?? 0) - tx.amount));
+      buckets.set(uk, r((buckets.get(uk) ?? 0) - tx.amount));
+    }
+  }
+
+  const founderBalances = userIds.map((id) => calcFounderBalance(id, data));
+  const companyBank = r(founderBalances.reduce((s, b) => r(s + b.balance), 0));
+  const poolAbove = poolAboveMin(companyBank, bankMin);
+  const bankDeficit = r(Math.max(0, bankMin - companyBank));
+
+  const founders: FounderAllowance[] = users.map((u) => {
+    const id = Number(u.id);
+    return {
+      userId: id,
+      name: u.name || u.fullName || 'User',
+      allowanceLeft: buckets.get(userKey(u.id)) ?? 0,
+    };
+  });
+
+  const byUserId = new Map<number, FounderAllowance>();
+  founders.forEach((f) => byUserId.set(f.userId, f));
+
+  return {
+    companyBank,
+    bankMin,
+    bankDeficit,
+    poolAboveMin: poolAbove,
+    founders,
+    byUserId,
+  };
 }
 
 /** IDs from JSON/API may be number or string; strict `===` misses personal tx attribution. */

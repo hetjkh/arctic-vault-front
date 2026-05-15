@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:allowance": "npx tsx scripts/test-allowance.ts",
+    "audit:allowance": "npx tsx scripts/allowance-audit.ts",
+    "test:finance-backend": "node ../arctic-vault-back/scripts/test-finance.js"
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",

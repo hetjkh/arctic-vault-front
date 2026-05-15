@@ -6,11 +6,17 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Landmark, Users, Wallet, Receipt, Sparkles } from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { BACKEND_URL } from '@/lib/backend';
-import { calcFinanceBreakdown, calcFounderBalance, formatCurrency } from '@/lib/calculations';
+import {
+  calcFinanceBreakdown,
+  calcFounderBalance,
+  calcAllowanceState,
+  COMPANY_BANK_MIN,
+  formatCurrency,
+} from '@/lib/calculations';
 import { mapBackendToDbData, type BackendSettlement, type BackendTx, type BackendUser } from '@/lib/mapBackendToDbData';
 import type { DBData } from '@/types';
 
-const BANK_MIN = 50000;
+const BANK_MIN = COMPANY_BANK_MIN;
 
 function money(n: number): string {
   return new Intl.NumberFormat('en-IN', {
@@ -124,8 +130,9 @@ export default function MoneyGuidePage() {
     user: u,
     bal: calcFounderBalance(u.id, data),
   }));
-  const companyBank = founderRows.reduce((s, r) => s + r.bal.balance, 0);
-  const bankGap = Math.max(0, BANK_MIN - companyBank);
+  const allowanceState = calcAllowanceState(data, BANK_MIN);
+  const companyBank = allowanceState.companyBank;
+  const bankGap = allowanceState.bankDeficit;
 
   return (
     <div style={{ minHeight: '100dvh', background: 'linear-gradient(180deg,#050508 0%,#0a0c12 40%,#050508 100%)', padding: '20px 18px 48px' }}>
@@ -321,21 +328,42 @@ export default function MoneyGuidePage() {
 
         <div style={{ height: 28 }} />
 
-        <StepBadge n={6} title="Bank total vs minimum (₹50,000)" />
+        <StepBadge n={6} title="Allowance — what each founder can still take personally" />
+        <p style={{ margin: '0 0 16px', fontSize: 15, lineHeight: 1.55, color: 'rgba(255,255,255,0.6)' }}>
+          The first <strong style={{ color: '#fff' }}>₹50,000</strong> in the company bank is locked. Only money <em>above</em> that becomes allowance, split <strong style={{ color: '#fff' }}>50/50</strong> when new shared income arrives.
+          If you take personal money and drop the bank below ₹50k, <strong style={{ color: '#fff' }}>only you</strong> get a negative allowance until you repay with <strong style={{ color: '#7ec8ff' }}>founder-only income</strong> (not split). Company expenses change the ledger but do not touch your partner&apos;s allowance.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+          {allowanceState.founders.map((f) => (
+            <PlainBox key={f.userId} border="rgba(255,255,255,0.12)">
+              <p style={{ margin: '0 0 4px', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>{f.name}</p>
+              <p style={{ margin: 0, fontSize: 24, fontWeight: 900, color: f.allowanceLeft < 0 ? '#ff6b8a' : f.allowanceLeft > 0 ? '#00ff41' : 'rgba(255,255,255,0.5)' }}>
+                {money(f.allowanceLeft)}
+              </p>
+              <p style={{ margin: '8px 0 0', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>allowance left</p>
+            </PlainBox>
+          ))}
+        </div>
+
+        <div style={{ height: 16 }} />
+
+        <StepBadge n={7} title="Bank total vs minimum (₹50,000)" />
         <PlainBox>
           <p style={{ margin: '0 0 12px', fontSize: 14, lineHeight: 1.55, color: 'rgba(255,255,255,0.55)' }}>
-            If you add <strong style={{ color: '#fff' }}>both balances</strong> together, you get how much is in the “company pot” for the tracker.
+            Ronit balance + Het balance = company bank.
           </p>
-          <p style={{ margin: '0 0 6px', fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Ronit balance + Het balance</p>
+          <p style={{ margin: '0 0 6px', fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Company bank</p>
           <p style={{ margin: '0 0 14px', fontSize: 26, fontWeight: 900, color: '#fff' }}>{money(companyBank)}</p>
-          <p style={{ margin: '0 0 6px', fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Minimum you want in the bank</p>
-          <p style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{money(BANK_MIN)}</p>
+          <p style={{ margin: '0 0 6px', fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Pool above minimum (split 50/50 for allowance)</p>
+          <p style={{ margin: '0 0 14px', fontSize: 18, fontWeight: 800, color: allowanceState.poolAboveMin > 0 ? '#00ff41' : 'rgba(255,255,255,0.75)' }}>
+            {money(allowanceState.poolAboveMin)}
+          </p>
           {bankGap > 0 ? (
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: '#ff6b8a', fontWeight: 700 }}>
-              Right now you are <strong>{money(bankGap)}</strong> below that minimum. The allowance math treats spendable money above ₹50,000 first — see the dashboard card for details.
+              You are <strong>{money(bankGap)}</strong> below the minimum. Repay with founder-only income or add shared income.
             </p>
           ) : (
-            <p style={{ margin: 0, fontSize: 14, color: '#00ff41', fontWeight: 700 }}>You are at or above the minimum. Good.</p>
+            <p style={{ margin: 0, fontSize: 14, color: '#00ff41', fontWeight: 700 }}>At or above the ₹50,000 minimum.</p>
           )}
         </PlainBox>
 
